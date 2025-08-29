@@ -325,6 +325,8 @@ const App = () => {
 
   // --- Touch Drag and Drop (Mobile) ---
   const handleTouchStart = (e, task) => {
+    // This is the key fix. By preventing the default browser behavior,
+    // we stop the site from scrolling when you start a drag gesture.
     e.preventDefault();
     setDraggedItem(task);
     // Store initial touch position to track movement
@@ -479,7 +481,7 @@ const App = () => {
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
                           transition={{ duration: 0.3 }}
-                          className={`flex items-center space-x-2 border-2 p-2 cursor-grab active:cursor-grabbing ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-black'} ${task.status === 'done' ? (isDarkMode ? 'bg-lime-800' : 'bg-lime-200') : ''}`}
+                          className={`touch-action-none flex items-center space-x-2 border-2 p-2 cursor-grab active:cursor-grabbing ${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-black'} ${task.status === 'done' ? (isDarkMode ? 'bg-lime-800' : 'bg-lime-200') : ''}`}
                         >
                           <span className={`flex-grow ${task.status === 'done' ? (isDarkMode ? 'line-through text-gray-400' : 'line-through text-gray-500') : ''}`}>
                             {task.text}

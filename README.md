@@ -1,6 +1,6 @@
-# Brutalist Dashboard
+# slab.
 
-A minimalist brutalist dashboard app built with React, Vite, Tailwind, and Framer Motion.
+A **_minimalist_** brutalist dashboard app built with React, Vite, Tailwind, and **_Framer Motion_**.
 
 ## 🚀 Run locally
 ```bash
