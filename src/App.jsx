@@ -20,7 +20,11 @@ const App = () => {
 
   // Kanban board state, structured by column status.
   const [tasks, setTasks] = useState(() => getLocalStorage('tasks', {
-    todo: [{ id: '1', text: 'Plan next quarter goals', status: 'todo' }, { id: '2', text: 'Review project proposal', status: 'todo' }],
+    todo: [
+      // The fix: I've replaced the hard-coded ID with a truly unique one.
+      { id: crypto.randomUUID(), text: 'Plan next quarter goals', status: 'todo' },
+      { id: crypto.randomUUID(), text: 'Review project proposal', status: 'todo' }
+    ],
     inProgress: [],
     done: [],
   }));
@@ -40,7 +44,7 @@ const App = () => {
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
   const [isHeroEditModalOpen, setIsHeroEditModalOpen] = useState(false);
   const [heroTitle, setHeroTitle] = useState(() => getLocalStorage('heroTitle', 'slab.'));
-  const [heroSubtitle, setHeroSubtitle] = useState(() => getLocalStorage('heroSubtitle', 'project.'));
+  const [heroSubtitle, setHeroSubtitle] = useState(() => getLocalStorage('heroSubtitle', 'prodboard.'));
 
   // Static quotes to ensure reliability without an external API.
   const staticQuotes = [
@@ -57,6 +61,9 @@ const App = () => {
 
   const timerIntervalRef = useRef(null);
   const searchTimeoutRef = useRef(null);
+  const dragItemRef = useRef(null);
+  const dragOverRef = useRef(null);
+  const taskRefs = useRef({});
 
   // A simple mapping for WMO weather codes to descriptions and emojis.
   // This helps make the raw data more readable for the user.
@@ -233,7 +240,7 @@ const App = () => {
         const data = await response.json();
         setSearchResults(data.results || []);
       } catch (error) {
-        console.error('Geocoding search failed:', error);
+      console.error('Geocoding search failed:', error);
         setSearchResults([]);
       }
     }, 500); // Debounce the search
@@ -254,7 +261,7 @@ const App = () => {
     const input = event.target.elements.taskInput;
     if (input.value.trim() !== "") {
       const newTask = {
-        id: Date.now().toString(),
+        id: crypto.randomUUID(),
         text: input.value,
         status: status,
       };
@@ -273,6 +280,7 @@ const App = () => {
     }));
   };
 
+  // --- Drag and Drop (Desktop) ---
   const handleDragStart = (e, task) => {
     setDraggedItem(task);
     e.dataTransfer.setData("taskId", task.id);
@@ -297,19 +305,76 @@ const App = () => {
   
     setTasks(prevTasks => {
       const sourceStatus = draggedItem.status;
-      const newSourceTasks = prevTasks[sourceStatus].filter(task => task.id !== draggedItem.id);
+      
+      // Fix for the duplicate key issue: Ensure a clean removal before adding.
+      const newTasks = { ...prevTasks };
+      
+      // Remove the item from its original list
+      newTasks[sourceStatus] = newTasks[sourceStatus].filter(task => task.id !== draggedItem.id);
+      
+      // Add the item to its new list
       const updatedItem = { ...draggedItem, status: status };
-      const newTargetTasks = [...prevTasks[status], updatedItem];
-
-      return {
-        ...prevTasks,
-        [sourceStatus]: newSourceTasks,
-        [status]: newTargetTasks,
-      };
+      newTasks[status] = [...newTasks[status], updatedItem];
+      
+      return newTasks;
     });
 
     setDraggedItem(null);
     setDropTarget(null);
+  };
+
+  // --- Touch Drag and Drop (Mobile) ---
+  const handleTouchStart = (e, task) => {
+    e.preventDefault();
+    setDraggedItem(task);
+    // Store initial touch position to track movement
+    const touch = e.touches[0];
+    dragItemRef.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      task: task,
+      element: e.currentTarget,
+    };
+    e.currentTarget.style.transition = 'none';
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (!draggedItem || !dragItemRef.current) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - dragItemRef.current.x;
+    const dy = touch.clientY - dragItemRef.current.y;
+    
+    // Visually move the task element
+    dragItemRef.current.element.style.transform = `translate(${dx}px, ${dy}px) rotate(2deg) scale(1.05)`;
+    dragItemRef.current.element.style.zIndex = '100';
+
+    // Highlight the drop zone
+    const targetElement = document.elementFromPoint(touch.clientX, touch.clientY);
+    const kanbanColumn = targetElement?.closest('.kanban-column');
+    if (kanbanColumn) {
+      const status = kanbanColumn.getAttribute('data-status');
+      setDropTarget(status);
+    } else {
+      setDropTarget(null);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    if (!draggedItem || !dragItemRef.current) return;
+
+    // Reset visual styles
+    dragItemRef.current.element.style.transform = '';
+    dragItemRef.current.element.style.zIndex = '';
+    dragItemRef.current.element.style.transition = '';
+
+    if (dropTarget) {
+      handleDrop(e, dropTarget);
+    }
+
+    setDraggedItem(null);
+    setDropTarget(null);
+    dragItemRef.current = null;
   };
 
   const formatTime = (seconds) => {
@@ -376,10 +441,15 @@ const App = () => {
               {['todo', 'inProgress', 'done'].map(status => (
                 <motion.div
                   key={status}
+                  data-status={status}
+                  className={`kanban-column border-2 p-2 min-h-64 ${borderClass} ${dropTarget === status ? (isDarkMode ? 'bg-gray-800' : 'bg-yellow-200') : (isDarkMode ? 'bg-gray-900' : 'bg-gray-100')}`}
+                  // Desktop drag-and-drop
                   onDragOver={(e) => handleDragOver(e, status)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, status)}
-                  className={`border-2 p-2 min-h-64 ${borderClass} ${dropTarget === status ? (isDarkMode ? 'bg-gray-800' : 'bg-yellow-200') : (isDarkMode ? 'bg-gray-900' : 'bg-gray-100')}`}
+                  // Mobile touch-and-drop
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
                 >
                   <h3 className={`text-xl font-bold uppercase mb-2 ${dropTarget === status ? 'text-red-600' : ''}`}>
                     {status.replace(/([A-Z])/g, ' $1').toUpperCase()}
@@ -401,7 +471,10 @@ const App = () => {
                         <motion.li
                           key={task.id}
                           draggable
+                          // Desktop events
                           onDragStart={(e) => handleDragStart(e, task)}
+                          // Mobile events
+                          onTouchStart={(e) => handleTouchStart(e, task)}
                           initial={{ opacity: 0, scale: 0.95 }}
                           animate={{ opacity: 1, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.95 }}
